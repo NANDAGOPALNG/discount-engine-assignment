@@ -9,8 +9,10 @@ import { useState } from 'react'
 import CsvUploader from './components/CsvUploader.jsx'
 import DataTable from './components/DataTable.jsx'
 import ErrorBanner from './components/ErrorBanner.jsx'
+import NaturalLanguageRuleInput from './components/NaturalLanguageRuleInput.jsx'
 import { parseRulesCSV, parseCartCSV } from './engine/csvParser.js'
 import { calculateCart } from './engine/discountEngine.js'
+import { validateRuleCandidate, generateRuleId } from './engine/ruleValidator.js'
 
 // ── Column definitions ───────────────────────────────────────────
 
@@ -30,6 +32,7 @@ const RULES_COLUMNS = [
     label: 'Min Cart',
     render: (v, row) => (row.scope === 'cart' ? `Rs.${v.toLocaleString('en-IN')}` : '—'),
   },
+  { key: 'source', label: 'Source' },
 ]
 
 const CART_COLUMNS = [
@@ -83,7 +86,7 @@ const S = {
   main:    { maxWidth: 960, margin: '0 auto', padding: '1.8rem 1.5rem' },
   section: { background: '#fff', border: '1px solid #CECECE', borderRadius: 6, padding: '1.2rem 1.4rem', marginBottom: '1.2rem' },
   sectionTitle: { fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: 14, color: '#131A48', marginBottom: '0.7rem', paddingBottom: 6, borderBottom: '2px solid #FF5800', display: 'inline-block' },
-  grid2:   { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' },
+  grid2:   { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '1rem' },
   btn:     {
     background: '#FF5800', color: '#fff', border: 'none', borderRadius: 4,
     padding: '0.65rem 2rem', fontSize: 13, fontWeight: 700, cursor: 'pointer',
@@ -110,7 +113,11 @@ const S = {
 // ── Component ────────────────────────────────────────────────────
 
 export default function App() {
-  const [rules, setRules]           = useState([])
+  // Rules come from two places and are kept apart so neither overwrites the other:
+  //   csvRules    — replaced whenever a rules CSV is uploaded
+  //   customRules — added via natural-language input after the user confirms them
+  const [csvRules, setCsvRules]     = useState([])
+  const [customRules, setCustomRules] = useState([])
   const [rulesErrors, setRulesErr]  = useState([])
   const [rulesFileName, setRulesFileName] = useState('')
 
@@ -124,7 +131,7 @@ export default function App() {
 
   function handleRulesLoad(csvText, fileName) {
     const { data, errors } = parseRulesCSV(csvText)
-    setRules(data)
+    setCsvRules(data)
     setRulesErr(errors)
     setRulesFileName(fileName)
     setResults(null) // clear stale results
@@ -138,9 +145,28 @@ export default function App() {
     setResults(null)
   }
 
+  // The rules the engine actually uses: CSV rules first, then confirmed custom rules
+  const rules = [...csvRules, ...customRules]
+  const ruleRows = [
+    ...csvRules.map((r) => ({ ...r, source: 'CSV' })),
+    ...customRules.map((r) => ({ ...r, source: 'Custom' })),
+  ]
+
   function handleCalculate() {
     const res = calculateCart(cartItems, rules)
     setResults(res)
+  }
+
+  // Called only after the user presses Confirm on a previewed rule
+  function handleConfirmRule(candidate) {
+    const { valid, rule } = validateRuleCandidate(candidate) // re-check; never trust upstream
+    if (!valid) return
+    const newRule = { ...rule, ruleId: generateRuleId(rules) }
+    setCustomRules([...customRules, newRule])
+    // Recalculate automatically if a cart is loaded
+    if (cartItems.length > 0) {
+      setResults(calculateCart(cartItems, [...rules, newRule]))
+    }
   }
 
   const canCalculate = rules.length > 0 && cartItems.length > 0
@@ -166,16 +192,16 @@ export default function App() {
               label="rules.csv"
               description="Upload your discount rules CSV"
               onLoad={handleRulesLoad}
-              hasData={rules.length > 0}
+              hasData={csvRules.length > 0}
               fileName={rulesFileName}
             />
             <ErrorBanner errors={rulesErrors} />
             {rules.length > 0 && (
               <div style={{ marginTop: '0.75rem' }}>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
-                  {rules.length} rule{rules.length > 1 ? 's' : ''} loaded
+                  {rules.length} rule{rules.length > 1 ? 's' : ''} active
                 </div>
-                <DataTable columns={RULES_COLUMNS} rows={rules} />
+                <DataTable columns={RULES_COLUMNS} rows={ruleRows} />
               </div>
             )}
           </div>
@@ -200,6 +226,12 @@ export default function App() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Natural-language rule input */}
+        <div style={S.section}>
+          <div style={S.sectionTitle}>Add a Rule in Plain English</div>
+          <NaturalLanguageRuleInput cartItems={cartItems} onConfirm={handleConfirmRule} />
         </div>
 
         {/* Calculate button */}

@@ -91,12 +91,16 @@ export function calculateDiscountAmount(price, rule) {
 /**
  * Builds the customer-facing reasoning string for an applied rule.
  */
-function ruleToReasoning(rule) {
+function ruleToReasoning(rule, appliedAmount) {
   const scopeLabel = rule.scope === 'brand' ? 'Brand' : 'Platform'
   if (rule.type === 'percentage') {
     return `${scopeLabel} offer: ${rule.value}% off`
   }
   if (rule.type === 'flat') {
+    // If the flat amount exceeded the remaining price, say what was really saved
+    if (appliedAmount !== undefined && appliedAmount < rule.value) {
+      return `${scopeLabel} offer: Rs.${rule.value} off (limited to Rs.${appliedAmount}, the remaining price)`
+    }
     return `${scopeLabel} offer: Rs.${rule.value} off`
   }
   return `${scopeLabel} offer applied`
@@ -154,19 +158,26 @@ export function applyDiscounts(item, rules) {
   const appliedRules = []
   const reasoningParts = []
 
+  // Each discount is capped at the price still remaining, so the item price
+  // can never go below zero and total discounts can never exceed the base price.
+  const capToPrice = (amount) => Math.min(Math.max(0, amount), price)
+
   if (winner) {
-    price -= calculateDiscountAmount(price, winner)
+    const amount = capToPrice(calculateDiscountAmount(price, winner))
+    price -= amount
     appliedRules.push(winner.ruleId)
-    reasoningParts.push(ruleToReasoning(winner))
+    reasoningParts.push(ruleToReasoning(winner, amount))
   }
 
   for (const rule of stackable) {
-    price -= calculateDiscountAmount(price, rule)
+    if (price <= 0) break // nothing left to discount — don't claim a rule that saved nothing
+    const amount = capToPrice(calculateDiscountAmount(price, rule))
+    price -= amount
     appliedRules.push(rule.ruleId)
-    reasoningParts.push(ruleToReasoning(rule))
+    reasoningParts.push(ruleToReasoning(rule, amount))
   }
 
-  const finalPrice = Math.round(price)
+  const finalPrice = Math.max(0, Math.round(price))
 
   return {
     itemId: item.itemId,
