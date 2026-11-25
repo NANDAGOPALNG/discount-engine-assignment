@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import CsvUploader from './components/CsvUploader.jsx'
+import PdfUploader from './components/PdfUploader.jsx'
 import DataTable from './components/DataTable.jsx'
 import ErrorBanner from './components/ErrorBanner.jsx'
 import NaturalLanguageRuleInput from './components/NaturalLanguageRuleInput.jsx'
@@ -124,6 +125,8 @@ export default function App() {
   const [cartItems, setCartItems]   = useState([])
   const [cartErrors, setCartErrors] = useState([])
   const [cartFileName, setCartFileName]   = useState('')
+  const [cartSource, setCartSource] = useState('')   // '' | 'csv' | 'pdf' — which upload filled the cart
+  const [pdfErrors, setPdfErrors]   = useState([])   // PDF import problems (the cart is left untouched)
 
   const [results, setResults]       = useState(null)
 
@@ -142,7 +145,25 @@ export default function App() {
     setCartItems(data)
     setCartErrors(errors)
     setCartFileName(fileName)
+    setCartSource('csv')
+    setPdfErrors([])
     setResults(null)
+  }
+
+  // PDF import succeeded and passed validation: replace the cart, keep every
+  // active rule (CSV + confirmed custom), and recalculate straight away.
+  function handlePdfLoad(items, fileName) {
+    setCartItems(items)
+    setCartErrors([])
+    setPdfErrors([])
+    setCartFileName(fileName)
+    setCartSource('pdf')
+    setResults(rules.length > 0 ? calculateCart(items, rules) : null)
+  }
+
+  // PDF import failed validation: show why. Cart and results are NOT touched.
+  function handlePdfError(errors) {
+    setPdfErrors(errors)
   }
 
   // The rules the engine actually uses: CSV rules first, then confirmed custom rules
@@ -213,10 +234,26 @@ export default function App() {
               label="cart.csv"
               description="Upload your cart CSV"
               onLoad={handleCartLoad}
-              hasData={cartItems.length > 0}
+              hasData={cartItems.length > 0 && cartSource !== 'pdf'}
               fileName={cartFileName}
             />
             <ErrorBanner errors={cartErrors} />
+            <div style={{ marginTop: '0.6rem' }}>
+              <PdfUploader
+                label="cart.pdf"
+                description="Or upload a cart as a PDF table"
+                onLoad={handlePdfLoad}
+                onError={handlePdfError}
+                hasData={cartItems.length > 0 && cartSource === 'pdf'}
+                fileName={cartFileName}
+              />
+            </div>
+            <ErrorBanner errors={pdfErrors} />
+            {pdfErrors.length > 0 && cartItems.length > 0 && (
+              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                Your current cart ({cartFileName}) was not changed.
+              </div>
+            )}
             {cartItems.length > 0 && (
               <div style={{ marginTop: '0.75rem' }}>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>
