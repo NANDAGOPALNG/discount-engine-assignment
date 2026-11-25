@@ -4,9 +4,9 @@ A small web app that calculates retail discounts for a shopping cart. Rules and 
 
 Built for the **Opptra FDE Intern assignment**.
 
-**Live demo:** [https://YOUR-DEPLOYMENT-URL.vercel.ap](https://discount-engine-assignment-orcin.vercel.app/)p  <!-- replace with your deployed URL before submitting -->
+**Live demo:** [https://discount-engine-assignment.vercel.app](https://discount-engine-assignment-orcin.vercel.app/)  <!-- replace with your deployed URL before submitting -->
 
-![Discount Engine screenshot](docs/screenshot.png)
+![Discount Engine screenshot](docs/Screenshot.png)
 
 ---
 
